@@ -161,3 +161,39 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes luxcie-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes luxcie-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes luxcie-pop {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes luxcie-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.luxcie-fade-up { animation: luxcie-fade-up 560ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.luxcie-fade-in { animation: luxcie-fade-in 420ms ease-out both; }
+.luxcie-pop { animation: luxcie-pop 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.luxcie-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.7) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: luxcie-shimmer 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .luxcie-fade-up,
+  .luxcie-fade-in,
+  .luxcie-pop,
+  .luxcie-shimmer { animation: none; }
+}

@@ -23,3 +23,19 @@ class ResearchResponse(BaseModel):
     review: str
     papers: list[Paper]
     fallback_message: str | None = None
+    is_guest: bool = False
+
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse

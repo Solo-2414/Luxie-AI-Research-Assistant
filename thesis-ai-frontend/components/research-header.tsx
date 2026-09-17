@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 
 interface ResearchHeaderProps {
   loading: boolean
+  guestSearchesLeft: number | null
   sortRecent: boolean
   onSortRecentChange: (sortRecent: boolean) => void
   startYear: number | null
@@ -20,7 +21,7 @@ export interface ResearchFilters {
   sortRecent: boolean
 }
 
-export function ResearchHeader({ loading, sortRecent, onSortRecentChange, startYear, onStartYearChange, onResearch }: ResearchHeaderProps) {
+export function ResearchHeader({ loading, guestSearchesLeft, sortRecent, onSortRecentChange, startYear, onStartYearChange, onResearch }: ResearchHeaderProps) {
   const [query, setQuery] = useState("")
   const [limit, setLimit] = useState("8")
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -36,13 +37,13 @@ export function ResearchHeader({ loading, sortRecent, onSortRecentChange, startY
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/80 backdrop-blur-md">
+    <header className="luxcie-fade-in sticky top-0 z-30 border-b border-gray-200 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-5xl items-center gap-4 px-6 py-3">
         <div className="flex shrink-0 items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900">
             <Sparkles className="h-4 w-4 text-white" aria-hidden="true" />
           </span>
-          <span className="text-sm font-semibold tracking-tight text-gray-900">Luxie AI</span>
+          <span className="text-sm font-semibold tracking-tight text-gray-900">Luxcie AI</span>
         </div>
 
         <form onSubmit={handleSubmit} className="relative flex flex-1 items-center">
@@ -57,8 +58,9 @@ export function ResearchHeader({ loading, sortRecent, onSortRecentChange, startY
               {loading ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Researching</> : "Research"}
             </Button>
           </div>
+          {guestSearchesLeft !== null ? <span className="absolute -bottom-5 left-4 text-[0.7rem] font-medium text-gray-400">Free searches left: {guestSearchesLeft}/3</span> : null}
           {filtersOpen ? (
-            <div className="absolute right-1 top-11 z-40 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-500 shadow-lg">
+            <div className="luxcie-pop absolute right-1 top-11 z-40 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-500 shadow-lg">
               <label className="flex items-center gap-1.5">Limit <select value={limit} onChange={(e) => setLimit(e.target.value)} className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700"><option value="4">4</option><option value="8">8</option><option value="12">12</option><option value="20">20</option></select></label>
               <span className="h-5 w-px bg-gray-200" aria-hidden="true" />
               <span className="text-gray-400">Sort order</span>

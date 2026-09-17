@@ -7,8 +7,9 @@ export interface PaperSource {
   url?: string
 }
 
-export interface LuxieResearchResponse {
+export interface LuxcieResearchResponse {
   review: string
   papers: PaperSource[]
   fallbackMessage?: string | null
+  isGuest?: boolean
 }

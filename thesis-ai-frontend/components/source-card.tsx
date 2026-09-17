@@ -23,7 +23,7 @@ export const SourceCard = forwardRef<HTMLElement, SourceCardProps>(function Sour
       ref={ref}
       aria-current={active ? "true" : undefined}
       className={cn(
-        "scroll-mt-4 rounded-xl border bg-white p-4 transition-all duration-200",
+        "luxcie-fade-up scroll-mt-4 rounded-xl border bg-white p-4 transition-all duration-200 hover:-translate-y-0.5",
         active
           ? "border-blue-300 shadow-sm ring-2 ring-blue-100"
           : "border-gray-200 hover:border-gray-400 hover:shadow-sm",

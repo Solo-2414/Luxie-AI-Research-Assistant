@@ -53,7 +53,7 @@ async def fetch_openalex(
     """Fetches open-access papers from OpenAlex."""
     sort = "publication_date:desc" if sort_by_recent else "relevance_score:desc"
     url = f"https://api.openalex.org/works?search={query}&per-page={limit}&sort={sort}"
-    headers = {"User-Agent": "Luxie-AI-Research-Assistant/1.0"}
+    headers = {"User-Agent": "Luxcie-AI-Research-Assistant/1.0"}
     try:
         response = await client.get(url, headers=headers, timeout=10.0)
         if response.status_code != 200:

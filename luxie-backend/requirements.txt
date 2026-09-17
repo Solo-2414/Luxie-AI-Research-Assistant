@@ -5,3 +5,10 @@ python-dotenv
 pydantic
 langchain
 langchain-google-genai
+sqlalchemy
+passlib
+bcrypt==4.0.1
+python-jose
+python-multipart
+email-validator
+slowapi

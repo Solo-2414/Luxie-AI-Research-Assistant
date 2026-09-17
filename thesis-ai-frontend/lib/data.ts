@@ -1,11 +1,11 @@
-import type { LuxieResearchResponse } from "./types"
+import type { LuxcieResearchResponse } from "./types"
 
 /**
  * Shape-accurate sample matching the FastAPI backend response.
  * The `review` string carries lightweight markdown (headings, paragraphs,
  * bullet and numbered lists) plus inline [Author, Year] citations.
  */
-export const SAMPLE_RESPONSE: LuxieResearchResponse = {
+export const SAMPLE_RESPONSE: LuxcieResearchResponse = {
   review: `## Overview
 
 Microplastics pose a growing ecological threat to marine ecosystems worldwide [Smith et al., 2023]. As plastic production continues to outpace waste management capacity, these particles have become pervasive across every studied ocean basin.

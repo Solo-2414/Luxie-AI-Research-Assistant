@@ -1,11 +1,12 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { Providers } from './providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Luxie AI — Academic Research Workspace',
+  title: 'Luxcie AI — Academic Research Workspace',
   description:
-    'Generate literature reviews with clickable citations linked to source papers. A clean, split-screen research workspace powered by Luxie AI.',
+    'Generate literature reviews with clickable citations linked to source papers. A clean, split-screen research workspace powered by Luxcie AI.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -42,7 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="light">
       <body className="antialiased">
-        {children}
+        <Providers>{children}</Providers>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

@@ -1,9 +1,28 @@
 from __future__ import annotations
 
 import os
+import time
+from collections.abc import AsyncGenerator
+from inspect import isawaitable
+from typing import Any
+
 import google.generativeai as genai
+from google.api_core.exceptions import NotFound, ResourceExhausted
 
 from .schemas import Paper
+
+_cached_flash_models: list[Any] | None = None
+_last_cache_time = 0.0
+_last_cache_key: str | None = None
+MODEL_CACHE_TTL_SECONDS = 60 * 60
+
+def _get_api_keys() -> list[str]:
+    keys = [key.strip() for key in os.getenv("GOOGLE_API_KEYS", "").split(",") if key.strip()]
+    if keys:
+        return keys
+
+    single_key = os.getenv("GOOGLE_API_KEY", "").strip()
+    return [single_key] if single_key else []
 
 def _format_papers(papers: list[Paper]) -> str:
     blocks: list[str] = []
@@ -17,17 +36,36 @@ def _format_papers(papers: list[Paper]) -> str:
         )
     return "\n\n".join(blocks)
 
-async def generate_literature_review(query: str, papers: list[Paper]) -> str:
-    api_key = (
-        os.getenv("GOOGLE_API_KEY", "").strip()
-        or os.getenv("GEMINI_API_KEY", "").strip()
-    )
-    if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY is not set")
 
-    # Initialize native Google SDK
+async def get_cached_models(api_key: str) -> list[Any]:
+    global _cached_flash_models, _last_cache_time, _last_cache_key
+
+    now = time.monotonic()
+    if (
+        _cached_flash_models is not None
+        and _last_cache_key == api_key
+        and now - _last_cache_time < MODEL_CACHE_TTL_SECONDS
+    ):
+        return _cached_flash_models
+
     genai.configure(api_key=api_key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash") 
+    models = [
+        model
+        for model in genai.list_models()
+        if "generateContent" in (model.supported_generation_methods or [])
+        and "flash" in model.name.lower()
+    ]
+    _cached_flash_models = models
+    _last_cache_time = now
+    _last_cache_key = api_key
+    return models
+
+async def generate_literature_review(
+    query: str, papers: list[Paper]
+) -> AsyncGenerator[str, None]:
+    api_keys = _get_api_keys()
+    if not api_keys:
+        raise RuntimeError("GOOGLE_API_KEY or GOOGLE_API_KEYS is not set")
 
     system_instruction = (
         "You are an academic research assistant. Write a concise, cited literature "
@@ -37,23 +75,47 @@ async def generate_literature_review(query: str, papers: list[Paper]) -> str:
         "synthesis of gaps or open questions."
     )
 
-    try:
-        model = genai.GenerativeModel(
-            model_name=model_name,
-            system_instruction=system_instruction,
-        )
-        
-        prompt = f"Research query: {query}\n\nPapers:\n{_format_papers(papers)}\n\nWrite a literature review that cites these sources."
-        
-        # Using start_chat() explicitly prevents the AFC SDK warning
-        chat = model.start_chat()
-        response = await chat.send_message_async(
-            prompt,
-            generation_config=genai.GenerationConfig(temperature=0.3)
-        )
-        return response.text
+    prompt = f"Research query: {query}\n\nPapers:\n{_format_papers(papers)}\n\nWrite a literature review that cites these sources."
+    for key_index, current_key in enumerate(api_keys, start=1):
+        try:
+            available_models = await get_cached_models(current_key)
+        except Exception as error:
+            print(f"Gemini key {key_index} could not list models; trying the next key: {error}")
+            continue
 
-    except Exception as e:
-        # This will expose the REAL error in your terminal
-        print(f"\n--- GEMINI ERROR LOG ---\n{str(e)}\n------------------------\n")
-        raise RuntimeError(f"Gemini API Error: {str(e)}")
+        for model in available_models:
+            try:
+                model_client = genai.GenerativeModel(
+                    model_name=model.name,
+                    system_instruction=system_instruction,
+                )
+                generation_config = genai.GenerationConfig(temperature=0.3)
+                stream_method = getattr(model_client, "generate_content_stream_async", None)
+                if stream_method is not None:
+                    stream = stream_method(prompt, generation_config=generation_config)
+                else:
+                    stream = await model_client.generate_content_async(
+                        prompt,
+                        generation_config=generation_config,
+                        stream=True,
+                    )
+                if isawaitable(stream):
+                    stream = await stream
+                async for response in stream:
+                    text = getattr(response, "text", "")
+                    if text:
+                        yield text
+                return
+            except (ResourceExhausted, NotFound) as error:
+                print(f"Model {model.name} failed on Key {key_index}, trying next: {error}")
+                continue
+            except Exception as error:
+                status_code = getattr(error, "status_code", None)
+                message = str(error).lower()
+                if status_code not in (404, 429) and "404" not in message and "429" not in message:
+                    print(f"Model {model.name} failed on Key {key_index}, trying next: {error}")
+                continue
+
+    raise RuntimeError(
+        "All API keys and models have exhausted their free-tier quotas. Please try again later."
+    )

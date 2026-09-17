@@ -23,7 +23,7 @@ const FORMATS = ["APA", "MLA", "Chicago"]
 
 export function ExportFooter({ paperCount, status, disabled, onExport }: ExportFooterProps) {
   return (
-    <footer className="sticky bottom-0 z-30 border-t border-gray-200 bg-white/80 backdrop-blur-md">
+    <footer className="luxcie-fade-in sticky bottom-0 z-30 border-t border-gray-200 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-2.5">
         <p role="status" className="text-xs text-gray-500">
           {status ?? (disabled

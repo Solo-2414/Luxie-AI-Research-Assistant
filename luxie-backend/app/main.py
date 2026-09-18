@@ -1,10 +1,17 @@
 import json
+import hashlib
+import math
 import os
+from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.coder import Coder
+from fastapi_cache.decorator import cache
 import google.generativeai as genai
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -14,7 +21,7 @@ from .database import Base, engine
 from .auth_utils import decode_access_token
 from .review import generate_literature_review
 from .routers.auth import router as auth_router
-from .schemas import ResearchRequest, ResearchResponse
+from .schemas import Paper, ResearchRequest, ResearchResponse
 from .scholar import ScholarError, search_papers
 
 load_dotenv()
@@ -35,6 +42,7 @@ app.include_router(auth_router)
 @app.on_event("startup")
 def create_database_tables() -> None:
     Base.metadata.create_all(bind=engine)
+    FastAPICache.init(InMemoryBackend())
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,20 +73,12 @@ def optimize_failed_query(query: str) -> str:
     print(f'[query-fallback] Triggered for query: "{original_query}"')
 
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-    api_keys = [gemini_key] if gemini_key else []
-    if not api_keys:
-        api_keys = [
-            key.strip()
-            for key in os.getenv("GOOGLE_API_KEYS", "").split(",")
-            if key.strip()
-        ]
-    if not api_keys:
-        single_key = os.getenv("GOOGLE_API_KEY", "").strip()
-        if single_key:
-            api_keys.append(single_key)
-    if not api_keys:
-        print("[query-fallback] No GEMINI_API_KEY, GOOGLE_API_KEYS, or GOOGLE_API_KEY configured")
+    if not gemini_key:
+        print("[query-fallback] GEMINI_API_KEY is not configured")
         return original_query
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
+    if not gemini_model:
+        gemini_model = "gemini-3.6-flash"
     print("[query-fallback] Gemini API key found; requesting query correction")
 
     prompt = (
@@ -91,8 +91,8 @@ def optimize_failed_query(query: str) -> str:
     )
 
     try:
-        genai.configure(api_key=api_keys[0])
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel(gemini_model)
         response = model.generate_content(prompt)
         raw_response = getattr(response, "text", "")
         print(f'[query-fallback] Gemini raw response: "{raw_response}"')
@@ -104,25 +104,106 @@ def optimize_failed_query(query: str) -> str:
         return original_query
 
 
+def research_cache_key(
+    func: Any,
+    namespace: str = "",
+    *,
+    request: Request | None = None,
+    response: Any = None,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> str:
+    """Build a stable cache key from the research body and request filters."""
+    payload = next((value for value in (*args, *kwargs.values()) if isinstance(value, ResearchRequest)), None)
+    if payload is not None:
+        cache_input = "|".join(
+            [
+                payload.query.strip().lower(),
+                str(payload.limit),
+                str(payload.start_year),
+                str(payload.end_year),
+                str(payload.sort_by_recent),
+            ]
+        )
+    else:
+        cache_input = repr((args, sorted(kwargs.items())))
+    digest = hashlib.sha256(cache_input.encode("utf-8")).hexdigest()
+    return f"{namespace}:research:{digest}"
+
+
+class SearchResultCoder(Coder):
+    """Serialize cached provider results without trying to encode an SSE stream."""
+
+    @classmethod
+    def encode(cls, value: tuple[list[Any], str | None, dict[str, int]]) -> bytes:
+        papers, fallback_message, source_breakdown = value
+        return json.dumps(
+            {
+                "papers": [paper.model_dump(mode="json") for paper in papers],
+                "fallback_message": fallback_message,
+                "source_breakdown": source_breakdown,
+            }
+        ).encode("utf-8")
+
+    @classmethod
+    def decode(cls, value: bytes) -> tuple[list[Any], str | None, dict[str, int]]:
+        payload = json.loads(value.decode("utf-8"))
+        return (
+            [Paper.model_validate(paper) for paper in payload["papers"]],
+            payload.get("fallback_message"),
+            payload.get("source_breakdown", {}),
+        )
+
+
+@cache(expire=3600, coder=SearchResultCoder, key_builder=research_cache_key)
+async def cached_search_papers(
+    query: str,
+    limit: int,
+    start_year: int | None,
+    end_year: int | None,
+    sort_by_recent: bool,
+    sort_by: str,
+    page: int,
+) -> tuple[list[Any], str | None, dict[str, int]]:
+    return await search_papers(
+        query=query,
+        limit=limit,
+        start_year=start_year,
+        end_year=end_year,
+        sort_by_recent=sort_by_recent,
+        sort_by=sort_by,
+    )
+
+
 @app.post("/api/research")
 @limiter.limit(
     "3/day",
     exempt_when=has_valid_bearer_token,
     error_message="Guest search limit reached. Please sign in for unlimited research.",
 )
-async def research(request: Request, payload: ResearchRequest) -> ResearchResponse:
+async def research(
+    request: Request,
+    payload: ResearchRequest,
+    sort_by: str = Query("relevance", enum=["relevance", "citations", "newest", "oldest"]),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=50),
+) -> ResearchResponse:
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=400, detail="query must not be empty")
+    effective_sort = "newest" if sort_by == "relevance" and payload.sort_by_recent else sort_by
+    fetch_limit = min(50, max(limit, page * limit))
 
     try:
         print(f'[search] Initial database search for: "{query}"')
-        papers, fallback_msg = await search_papers(
+        papers, fallback_msg, source_breakdown = await cached_search_papers(
             query=query,
-            limit=payload.limit,
+            limit=fetch_limit,
             start_year=payload.start_year,
             end_year=payload.end_year,
             sort_by_recent=payload.sort_by_recent,
+            sort_by=effective_sort,
+            page=page,
         )
         print(f"[search] Initial search returned {len(papers)} papers")
         if not papers:
@@ -131,17 +212,20 @@ async def research(request: Request, payload: ResearchRequest) -> ResearchRespon
             print(f'[search] Optimized query returned: "{optimized_query}"')
             if optimized_query and optimized_query != query:
                 print(f'[search] Retrying database search with: "{optimized_query}"')
-                retry_papers, retry_message = await search_papers(
+                retry_papers, retry_message, retry_breakdown = await cached_search_papers(
                     query=optimized_query,
-                    limit=payload.limit,
+                    limit=fetch_limit,
                     start_year=payload.start_year,
                     end_year=payload.end_year,
                     sort_by_recent=payload.sort_by_recent,
+                    sort_by=effective_sort,
+                    page=page,
                 )
                 print(f"[search] Retry search returned {len(retry_papers)} papers")
                 if retry_papers:
                     query = optimized_query
                     papers = retry_papers
+                    source_breakdown = retry_breakdown
                     fallback_msg = retry_message or f'Retried search as "{optimized_query}".'
             else:
                 print("[search] Gemini returned the original query; skipping retry")
@@ -149,20 +233,29 @@ async def research(request: Request, payload: ResearchRequest) -> ResearchRespon
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     is_guest = not has_valid_bearer_token(request)
+    total_results = len(papers)
+    offset = (page - 1) * limit
+    paginated_papers = papers[offset : offset + limit]
+    total_pages = math.ceil(total_results / limit) if total_results else 0
 
     async def event_stream():
         metadata = {
             "type": "papers",
-            "papers": [paper.model_dump(mode="json") for paper in papers],
+            "total_results": total_results,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages,
+            "source_breakdown": source_breakdown,
+            "papers": [paper.model_dump(mode="json") for paper in paginated_papers],
             "fallback_message": fallback_msg,
             "is_guest": is_guest,
         }
         yield f"data: {json.dumps(metadata)}\n\n"
-        if not papers:
+        if not paginated_papers:
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             return
         try:
-            async for chunk in generate_literature_review(query, papers):
+            async for chunk in generate_literature_review(query, paginated_papers):
                 yield f"data: {json.dumps({'type': 'text', 'text': chunk})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         except RuntimeError as exc:

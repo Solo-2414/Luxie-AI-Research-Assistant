@@ -8,13 +8,17 @@ from typing import Any
 
 import google.generativeai as genai
 from google.api_core.exceptions import NotFound, ResourceExhausted
+from dotenv import load_dotenv
 
 from .schemas import Paper
+
+load_dotenv()
 
 _cached_flash_models: list[Any] | None = None
 _last_cache_time = 0.0
 _last_cache_key: str | None = None
 MODEL_CACHE_TTL_SECONDS = 60 * 60
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 def _get_api_keys() -> list[str]:
     keys = [key.strip() for key in os.getenv("GOOGLE_API_KEYS", "").split(",") if key.strip()]
@@ -53,7 +57,7 @@ async def get_cached_models(api_key: str) -> list[Any]:
         model
         for model in genai.list_models()
         if "generateContent" in (model.supported_generation_methods or [])
-        and "flash" in model.name.lower()
+        and model.name.rsplit("/", 1)[-1].lower() == GEMINI_MODEL.lower()
     ]
     _cached_flash_models = models
     _last_cache_time = now

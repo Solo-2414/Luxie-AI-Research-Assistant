@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+import math
+import os
 import re
+from asyncio import sleep
 import xml.etree.ElementTree as ET
 
 import httpx
+from dotenv import load_dotenv
 
 from .schemas import Paper
+
+load_dotenv()
 
 
 class ScholarError(Exception):
@@ -116,6 +122,7 @@ async def fetch_openalex(
                     year=item.get("publication_year"),
                     url=item.get("doi") or item.get("id"),
                     citation_count=item.get("cited_by_count"),
+                    source="OpenAlex",
                 )
             )
         return papers
@@ -190,6 +197,7 @@ async def fetch_arxiv(
                     year=year,
                     url=url_str,
                     citation_count=None,
+                    source="arXiv",
                 )
             )
         return papers
@@ -198,13 +206,114 @@ async def fetch_arxiv(
         return []
 
 
+async def fetch_from_semantic_scholar(query: str, limit: int = 5) -> list[Paper]:
+    """Fetch and normalize papers from Semantic Scholar."""
+    url = "https://api.semanticscholar.org/graph/v1/paper/search"
+    params = {
+        "query": query,
+        "limit": limit,
+        "fields": "title,authors,year,abstract,url,citationCount,externalIds",
+    }
+    api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
+    headers = {"x-api-key": api_key} if api_key else {}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, params=params, headers=headers)
+            if response.status_code == 429:
+                print("Semantic Scholar returned HTTP 429; retrying once after 1.2 seconds")
+                await sleep(1.2)
+                response = await client.get(url, params=params, headers=headers)
+        if response.status_code != 200:
+            print(f"Semantic Scholar fetch returned HTTP {response.status_code}")
+            return []
+
+        papers: list[Paper] = []
+        for item in response.json().get("data") or []:
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+
+            authors = [
+                (author.get("name") or "").strip()
+                for author in item.get("authors") or []
+            ]
+            authors = [author for author in authors if author] or ["Unknown Author"]
+            external_ids = item.get("externalIds") or {}
+            doi = (external_ids.get("DOI") or "").strip()
+            paper_url = (item.get("url") or "").strip() or None
+            if doi and not paper_url:
+                paper_url = f"https://doi.org/{doi}"
+
+            papers.append(
+                Paper(
+                    paper_id=doi or item.get("paperId"),
+                    title=title,
+                    authors=authors[:3],
+                    summary=(item.get("abstract") or "No abstract available.").strip(),
+                    year=item.get("year"),
+                    url=paper_url,
+                    citation_count=item.get("citationCount"),
+                    source="Semantic Scholar",
+                )
+            )
+        return papers
+    except Exception as exc:
+        print(f"Semantic Scholar fetch error: {exc}")
+        return []
+
+
+def _paper_identity(paper: Paper) -> tuple[str, str]:
+    """Return a DOI identity when available, otherwise a normalized title."""
+    candidate = (paper.url or "").strip().lower()
+    doi_match = re.search(r"10\.\d{4,9}/[^\s]+", candidate)
+    if doi_match:
+        return "doi", doi_match.group(0).rstrip(".,;)")
+    return "title", re.sub(r"\s+", " ", paper.title.strip().lower())
+
+
+def _normalize_paper(paper: Paper) -> Paper:
+    current_year = datetime.now().year
+    try:
+        citation_count = int(paper.citation_count or 0)
+    except (TypeError, ValueError):
+        citation_count = 0
+    try:
+        year = int(paper.year or current_year)
+    except (TypeError, ValueError):
+        year = current_year
+    return paper.model_copy(update={"citation_count": citation_count, "year": year})
+
+
+def _sort_papers(papers: list[Paper], query: str, sort_by: str) -> None:
+    if sort_by == "citations":
+        papers.sort(key=lambda paper: paper.citation_count or 0, reverse=True)
+    elif sort_by == "newest":
+        papers.sort(key=lambda paper: paper.year or 0, reverse=True)
+    elif sort_by == "oldest":
+        papers.sort(key=lambda paper: paper.year or 0)
+    else:
+        current_year = datetime.now().year
+        query_terms = re.findall(r"[a-z0-9]+", query.lower())
+
+        def relevance_score(paper: Paper) -> float:
+            recency_score = max(0, 10 - (current_year - (paper.year or 0)))
+            citation_score = min(10, math.log1p(paper.citation_count or 0))
+            title = paper.title.lower()
+            title_match = 5 if query_terms and all(term in title for term in query_terms) else 0
+            return (recency_score * 0.4) + (citation_score * 0.4) + (title_match * 0.2)
+
+        papers.sort(key=relevance_score, reverse=True)
+
+
 async def search_papers(
     query: str,
     limit: int = 8,
     start_year: int | None = None,
     end_year: int | None = None,
     sort_by_recent: bool = False,
-) -> tuple[list[Paper], str | None]:
+    sort_by: str = "relevance",
+) -> tuple[list[Paper], str | None, dict[str, int]]:
     """Fetches from OpenAlex and ArXiv concurrently, deduplicates, and returns papers."""
     per_source_limit = max(2, limit)
 
@@ -216,7 +325,16 @@ async def search_papers(
             fetch_arxiv(
                 client, search_query, limit=per_source_limit, sort_by_recent=sort_by_recent
             ),
+            fetch_from_semantic_scholar(search_query, limit=per_source_limit),
             return_exceptions=True,
+        )
+        openalex_results = results[0] if isinstance(results[0], list) else []
+        arxiv_results = results[1] if isinstance(results[1], list) else []
+        semantic_results = results[2] if isinstance(results[2], list) else []
+        print(
+            f"--- DEBUG: Combined {len(openalex_results)} from OpenAlex, "
+            f"{len(arxiv_results)} from arXiv, and "
+            f"{len(semantic_results)} from Semantic Scholar ---"
         )
         combined: list[Paper] = []
         for result in results:
@@ -236,28 +354,30 @@ async def search_papers(
                 )
 
         if not combined_papers:
-            return [], "No papers found for this query. Try adding spaces or using a broader search."
+            return [], "No papers found for this query. Try adding spaces or using a broader search.", {}
 
-        # Deduplicate papers based on title similarity
-        seen_titles = set()
+        # Prefer DOI identity, then fall back to normalized title.
+        seen_papers: set[tuple[str, str]] = set()
         unique_papers: list[Paper] = []
         for paper in combined_papers:
-            clean_title = paper.title.strip().lower()
-            if clean_title not in seen_titles:
-                seen_titles.add(clean_title)
+            paper = _normalize_paper(paper)
+            identity = _paper_identity(paper)
+            if identity not in seen_papers:
+                seen_papers.add(identity)
                 unique_papers.append(paper)
 
         filtered = _filter_by_year(unique_papers, start_year, end_year)
-        current_year = datetime.now().year
-        if len(filtered) < 4 and start_year is not None:
-            fallback_start_year = start_year - 5
-            if fallback_start_year <= 0 or fallback_start_year > current_year:
-                fallback_start_year = None
-            filtered = _filter_by_year(unique_papers, fallback_start_year, end_year)
+        if len(filtered) < min(4, len(unique_papers)):
+            # Keep the end-year constraint, but relax the recent-year constraint
+            # when it would leave too few results for a useful response.
+            filtered = _filter_by_year(unique_papers, None, end_year)
             fallback_messages.append(
-                "Fewer than 4 recent papers found. Automatically expanded search "
-                "to include foundational literature."
+                "Fewer papers matched the recent-year filter. Expanded search to "
+                "include older literature."
             )
-        if sort_by_recent:
-            filtered.sort(key=lambda paper: paper.year or 0, reverse=True)
-        return filtered[:limit], " ".join(fallback_messages) or None
+        _sort_papers(filtered, query, sort_by)
+        source_breakdown: dict[str, int] = {}
+        for paper in filtered:
+            source = paper.source or "Unknown"
+            source_breakdown[source] = source_breakdown.get(source, 0) + 1
+        return filtered, " ".join(fallback_messages) or None, source_breakdown

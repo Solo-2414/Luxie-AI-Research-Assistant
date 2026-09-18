@@ -17,6 +17,7 @@ class Paper(BaseModel):
     year: int | None = None
     url: str | None = None
     citation_count: int | None = None
+    source: str | None = None
 
 
 class ResearchResponse(BaseModel):

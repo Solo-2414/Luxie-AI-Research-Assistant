@@ -21,12 +21,18 @@ interface BackendPaper {
   year?: number | null
   url?: string | null
   citation_count?: number | null
+  source?: string | null
 }
 
 interface BackendResearchResponse {
   review?: string
   papers?: BackendPaper[]
   fallback_message?: string | null
+  total_results?: number
+  page?: number
+  limit?: number
+  total_pages?: number
+  source_breakdown?: Record<string, number>
 }
 
 interface ResearchStreamEvent {
@@ -36,6 +42,11 @@ interface ResearchStreamEvent {
   is_guest?: boolean
   text?: string
   message?: string
+  total_results?: number
+  page?: number
+  limit?: number
+  total_pages?: number
+  source_breakdown?: Record<string, number>
 }
 
 function errorMessageFromBody(body: unknown, status: number): string {
@@ -59,6 +70,7 @@ export function mapPaper(paper: BackendPaper): PaperSource {
     year: paper.year ?? null,
     summary: paper.summary?.trim() || "No abstract available.",
     url: paper.url ?? undefined,
+    source: paper.source ?? undefined,
   }
 }
 
@@ -68,6 +80,11 @@ export function mapResearchResponse(payload: BackendResearchResponse): LuxcieRes
     papers: (payload.papers ?? []).map(mapPaper),
     fallbackMessage: payload.fallback_message ?? null,
     isGuest: payload.is_guest ?? false,
+    totalResults: payload.total_results,
+    page: payload.page,
+    limit: payload.limit,
+    totalPages: payload.total_pages,
+    sourceBreakdown: payload.source_breakdown,
   }
 }
 
@@ -84,7 +101,7 @@ export async function fetchResearch(
 ): Promise<LuxcieResearchResponse> {
   let response: Response
   try {
-    response = await fetch(RESEARCH_URL, {
+    response = await fetch(`${RESEARCH_URL}?page=1&limit=${filters.limit}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -124,7 +141,7 @@ export async function streamResearch(
 ): Promise<void> {
   let response: Response
   try {
-    response = await fetch(RESEARCH_URL, {
+    response = await fetch(`${RESEARCH_URL}?page=1&limit=${filters.limit}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

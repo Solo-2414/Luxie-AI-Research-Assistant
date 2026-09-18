@@ -5,6 +5,7 @@ export interface PaperSource {
   field?: string
   summary: string
   url?: string
+  source?: string
 }
 
 export interface LuxcieResearchResponse {
@@ -12,4 +13,9 @@ export interface LuxcieResearchResponse {
   papers: PaperSource[]
   fallbackMessage?: string | null
   isGuest?: boolean
+  totalResults?: number
+  page?: number
+  limit?: number
+  totalPages?: number
+  sourceBreakdown?: Record<string, number>
 }

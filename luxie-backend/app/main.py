@@ -46,9 +46,17 @@ def create_database_tables() -> None:
     Base.metadata.create_all(bind=engine)
     FastAPICache.init(InMemoryBackend())
 
+configured_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("FRONTEND_ORIGINS", os.getenv("FRONTEND_ORIGIN", "")).split(",")
+    if origin.strip()
+]
+allowed_origins = list(dict.fromkeys(["http://localhost:3000", *configured_origins]))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://[a-zA-Z0-9-]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

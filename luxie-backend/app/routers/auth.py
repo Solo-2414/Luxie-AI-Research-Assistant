@@ -14,6 +14,15 @@ from ..schemas import UserResponse
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+AUTH_COOKIE_MAX_AGE = 18000
+
+
+def get_cookie_token(request: Request) -> str | None:
+    cookie_value = request.cookies.get("access_token")
+    if not cookie_value:
+        return None
+    scheme, _, token = cookie_value.partition(" ")
+    return token if scheme.lower() == "bearer" else cookie_value
 
 
 class RegisterRequest(BaseModel):
@@ -32,7 +41,7 @@ def get_current_user(
     token: Annotated[str | None, Depends(optional_oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
-    token = token or request.cookies.get("access_token")
+    token = token or get_cookie_token(request)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     email = decode_access_token(token)
@@ -58,7 +67,7 @@ def get_optional_current_user(
     token: Annotated[str | None, Depends(optional_oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User | None:
-    token = token or request.cookies.get("access_token")
+    token = token or get_cookie_token(request)
     if not token:
         return None
     email = decode_access_token(token)
@@ -82,7 +91,16 @@ def register(payload: RegisterRequest, response: Response, db: Annotated[Session
     db.commit()
     db.refresh(user)
 
-    response.set_cookie(key="access_token", value=create_access_token(user.email), httponly=True, samesite="lax", secure=True, max_age=3600, path="/")
+    access_token = create_access_token(user.email)
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        samesite="none",
+        secure=True,
+        max_age=AUTH_COOKIE_MAX_AGE,
+        path="/",
+    )
     return user
 
 
@@ -97,13 +115,22 @@ def login(payload: LoginRequest, response: Response, db: Annotated[Session, Depe
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    response.set_cookie(key="access_token", value=create_access_token(user.email), httponly=True, samesite="lax", secure=True, max_age=3600, path="/")
+    access_token = create_access_token(user.email)
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        samesite="none",
+        secure=True,
+        max_age=AUTH_COOKIE_MAX_AGE,
+        path="/",
+    )
     return user
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(response: Response) -> None:
-    response.delete_cookie(key="access_token", path="/")
+    response.delete_cookie(key="access_token", path="/", secure=True, samesite="none")
 
 
 @router.get("/me", response_model=UserResponse)

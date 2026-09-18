@@ -22,7 +22,7 @@ from .database import Base, engine, get_db
 from .auth_utils import decode_access_token
 from .models import SearchHistory, User
 from .review import generate_literature_review
-from .routers.auth import get_current_user, get_optional_current_user, router as auth_router
+from .routers.auth import get_cookie_token, get_current_user, get_optional_current_user, router as auth_router
 from .schemas import Paper, ResearchRequest, ResearchResponse, SearchHistoryCreate, SearchHistoryResponse
 from .scholar import ScholarError, fetch_citing_papers, search_papers
 
@@ -146,7 +146,7 @@ async def citations(
 def has_valid_bearer_token(request: Request) -> bool:
     authorization = request.headers.get("Authorization", "")
     scheme, _, token = authorization.partition(" ")
-    token = token if scheme.lower() == "bearer" else request.cookies.get("access_token", "")
+    token = token if scheme.lower() == "bearer" else get_cookie_token(request)
     return bool(token) and decode_access_token(token) is not None
 
 

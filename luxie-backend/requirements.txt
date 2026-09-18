@@ -14,3 +14,4 @@ email-validator
 slowapi
 google-generativeai
 fastapi-cache2
+jinja2

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,6 +18,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    search_history: Mapped[list["SearchHistory"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class SavedResearch(Base):
@@ -31,3 +35,15 @@ class SavedResearch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     user: Mapped[User] = relationship(back_populates="saved_research")
+
+
+class SearchHistory(Base):
+    __tablename__ = "search_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    query: Mapped[str] = mapped_column(String(500), nullable=False)
+    results_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+    user: Mapped[User] = relationship(back_populates="search_history")

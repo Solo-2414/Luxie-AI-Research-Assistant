@@ -11,10 +11,12 @@ import { ReviewPane } from "@/components/review-pane"
 import { SourcesPane } from "@/components/sources-pane"
 import { ExportFooter } from "@/components/export-footer"
 import { SkeletonLoader } from "@/components/SkeletonLoader"
+import { Pagination } from "@/components/Pagination"
 
 const EMPTY_RESPONSE: LuxcieResearchResponse = { review: "", papers: [] }
 const GUEST_SEARCH_LIMIT = 3
 type CitationStyle = "APA" | "MLA" | "Chicago"
+type ActiveTab = "review" | "sources"
 
 function formatCitation(paper: LuxcieResearchResponse["papers"][number], style: CitationStyle): string {
   const authors = formatAuthors(paper.authors)
@@ -57,14 +59,18 @@ export default function ResearchPage() {
   const [error, setError] = useState<string | null>(null)
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<ActiveTab>("review")
   const [sortRecent, setSortRecent] = useState(false)
   const [startYear, setStartYear] = useState<number | null>(currentYear - 5)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [guestSearches, setGuestSearches] = useState(0)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalMessage, setAuthModalMessage] = useState<string | undefined>()
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [lastSearch, setLastSearch] = useState<{ query: string; filters: ResearchFilters } | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const { user, token, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth()
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -87,7 +93,14 @@ export default function ResearchPage() {
 
   const referenceCounts = useMemo(() => countReferences(data.review, data.papers), [data.review, data.papers])
 
-  const handleResearch = useCallback(async (query: string, filters: ResearchFilters) => {
+  const handleCitation = useCallback((id: string) => {
+    setActiveId(id)
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+      setActiveTab("sources")
+    }
+  }, [])
+
+  const handleResearch = useCallback(async (query: string, filters: ResearchFilters, requestedPage = 1) => {
     setLoading(true)
     const trimmed = query.trim()
     if (!trimmed) {
@@ -105,8 +118,11 @@ export default function ResearchPage() {
     setError(null)
     setFallbackMessage(null)
     setActiveId(null)
+    setActiveTab("review")
     setReviewText("")
     setData(EMPTY_RESPONSE)
+    setPage(requestedPage)
+    setLastSearch({ query: trimmed, filters })
     try {
       await streamResearch(
         trimmed,
@@ -119,9 +135,16 @@ export default function ResearchPage() {
               papers: result.papers,
               fallbackMessage: result.fallbackMessage,
               isGuest: result.isGuest,
+              totalResults: result.totalResults,
+              page: result.page,
+              limit: result.limit,
+              totalPages: result.totalPages,
+              sourceBreakdown: result.sourceBreakdown,
             }))
+            setPage(result.page ?? requestedPage)
+            setTotalPages(result.totalPages ?? 1)
             setFallbackMessage(result.fallbackMessage ?? null)
-            if (result.isGuest) {
+            if (result.isGuest && requestedPage === 1) {
               const nextCount = Math.min(guestSearches + 1, GUEST_SEARCH_LIMIT)
               const today = new Date().toISOString().slice(0, 10)
               localStorage.setItem("luxcie_guest_searches", JSON.stringify({ date: today, count: nextCount }))
@@ -137,7 +160,7 @@ export default function ResearchPage() {
           },
         },
         controller.signal,
-        token,
+        requestedPage,
       )
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return
@@ -149,7 +172,12 @@ export default function ResearchPage() {
     } finally {
       if (abortRef.current === controller) setLoading(false)
     }
-  }, [authLoading, guestSearches, openAuthModal, token, user])
+  }, [authLoading, guestSearches, openAuthModal, user])
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    if (!lastSearch || nextPage < 1 || nextPage > totalPages || nextPage === page) return
+    void handleResearch(lastSearch.query, lastSearch.filters, nextPage)
+  }, [handleResearch, lastSearch, page, totalPages])
 
   const handleExport = useCallback(async (format: string) => {
     if (!user) {
@@ -186,19 +214,43 @@ export default function ResearchPage() {
     <div className="luxcie-fade-in flex min-h-screen h-dvh flex-col bg-white">
       <ResearchHeader loading={loading} guestSearchesLeft={user ? null : Math.max(GUEST_SEARCH_LIMIT - guestSearches, 0)} sortRecent={sortRecent} onSortRecentChange={setSortRecent} startYear={startYear} onStartYearChange={setStartYear} onResearch={handleResearch} />
       {error ? <div role="alert" className="luxcie-fade-in border-b border-red-100 bg-red-50 px-6 py-2 text-center text-sm text-red-700">{error}</div> : null}
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
-        {loading ? <SkeletonLoader /> : (
-          <div className="grid min-h-0 flex-1 auto-rows-[minmax(28rem,auto)] grid-cols-1 lg:grid-rows-1 lg:overflow-hidden lg:grid-cols-[1.1fr_0.9fr]">
+      <nav aria-label="Research result sections" className="sticky top-24 z-20 flex border-b border-gray-200 bg-white/95 p-2 backdrop-blur-md sm:hidden">
+        <button type="button" onClick={() => setActiveTab("review")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${activeTab === "review" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}>Literature Review</button>
+        <button type="button" onClick={() => setActiveTab("sources")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${activeTab === "sources" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}>Sources ({data.papers.length})</button>
+      </nav>
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-24 md:pb-0 lg:overflow-hidden">
+        {loading ? <SkeletonLoader activeTab={activeTab} /> : (
+          <>
+          <div key={activeTab} className="luxcie-fade-in sm:hidden">
+            {activeTab === "review" ? (
+              <div className="min-h-0">
+                {fallbackMessage ? <div role="status" className="luxcie-pop mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">{fallbackMessage}</div> : null}
+                <ReviewPane review={data.review} papers={data.papers} activeId={activeId} loading={Boolean(lastSearch && !reviewText.trim() && !error)} hasSubmittedQuery={lastSearch !== null} onCite={handleCitation} />
+              </div>
+            ) : (
+              <SourcesPane papers={data.papers} referenceCounts={referenceCounts} activeId={activeId} loading={false} />
+            )}
+          </div>
+          <div className="hidden min-h-0 flex-1 auto-rows-[minmax(28rem,auto)] grid-cols-1 md:grid md:grid-rows-1 md:overflow-hidden md:grid-cols-[1.1fr_0.9fr]">
             <div className="min-h-0 border-gray-200 lg:border-r">
               {fallbackMessage ? <div role="status" className="luxcie-pop mx-8 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">{fallbackMessage}</div> : null}
-              <ReviewPane review={data.review} papers={data.papers} activeId={activeId} loading={false} onCite={setActiveId} />
+              <ReviewPane
+                review={data.review}
+                papers={data.papers}
+                activeId={activeId}
+                loading={Boolean(lastSearch && !reviewText.trim() && !error)}
+                hasSubmittedQuery={lastSearch !== null}
+                onCite={handleCitation}
+              />
             </div>
             <div className="min-h-0 border-t border-gray-200 lg:border-t-0">
               <SourcesPane papers={data.papers} referenceCounts={referenceCounts} activeId={activeId} loading={false} />
             </div>
           </div>
+          </>
         )}
       </main>
+      <Pagination page={page} totalPages={totalPages} disabled={loading || !lastSearch} onPageChange={handlePageChange} />
       <ExportFooter paperCount={data.papers.length} status={exportStatus} disabled={loading || data.papers.length === 0} onExport={handleExport} />
       <AuthModal open={authModalOpen} message={authModalMessage} onClose={() => setAuthModalOpen(false)} />
     </div>

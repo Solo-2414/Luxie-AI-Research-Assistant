@@ -1,7 +1,10 @@
 export interface PaperSource {
+  paperId?: string
   title: string
   authors: string[]
   year: number | null
+  citationCount?: number | null
+  venue?: string
   field?: string
   summary: string
   url?: string

@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/select"
 import { SourceCard } from "./source-card"
 import { SourceCardSkeleton } from "./skeletons"
+import { CiteModal } from "./CiteModal"
+import { CitingPapersSheet } from "./citing-papers-sheet"
 
 type SortKey = "newest" | "oldest" | "most-cited"
 
@@ -25,6 +27,8 @@ interface SourcesPaneProps {
 
 export function SourcesPane({ papers, referenceCounts, activeId, loading }: SourcesPaneProps) {
   const [sort, setSort] = useState<SortKey>("newest")
+  const [paperToCite, setPaperToCite] = useState<PaperSource | null>(null)
+  const [paperToExplore, setPaperToExplore] = useState<PaperSource | null>(null)
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map())
   const currentYear = new Date().getFullYear()
   const recentCount = papers.filter((paper) => paper.year !== null && paper.year >= currentYear - 5).length
@@ -40,7 +44,7 @@ export function SourcesPane({ papers, referenceCounts, activeId, loading }: Sour
         return withIndex.sort((a, b) => (a.paper.year ?? 0) - (b.paper.year ?? 0))
       case "most-cited":
         return withIndex.sort(
-          (a, b) => referenceCounts[b.originalIndex] - referenceCounts[a.originalIndex],
+          (a, b) => (b.paper.citationCount ?? 0) - (a.paper.citationCount ?? 0),
         )
     }
   }, [papers, sort, referenceCounts])
@@ -114,11 +118,15 @@ export function SourcesPane({ papers, referenceCounts, activeId, loading }: Sour
                 active={id === activeId}
                 referenceCount={referenceCounts[originalIndex]}
                 currentYear={currentYear}
+                onCite={() => setPaperToCite(paper)}
+                onShowCitingPapers={() => setPaperToExplore(paper)}
               />
             )
           })
         )}
       </div>
+      {paperToCite ? <CiteModal paper={paperToCite} open onClose={() => setPaperToCite(null)} /> : null}
+      <CitingPapersSheet paper={paperToExplore} open={paperToExplore !== null} onClose={() => setPaperToExplore(null)} />
     </section>
   )
 }

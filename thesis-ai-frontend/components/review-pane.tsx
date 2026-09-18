@@ -10,10 +10,11 @@ interface ReviewPaneProps {
   papers: PaperSource[]
   activeId: string | null
   loading: boolean
+  hasSubmittedQuery: boolean
   onCite: (id: string) => void
 }
 
-export function ReviewPane({ review, papers, activeId, loading, onCite }: ReviewPaneProps) {
+export function ReviewPane({ review, papers, activeId, loading, hasSubmittedQuery, onCite }: ReviewPaneProps) {
   return (
     <section aria-label="Literature review" className="flex h-full flex-col">
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white/80 px-8 py-4 backdrop-blur-md">
@@ -32,12 +33,17 @@ export function ReviewPane({ review, papers, activeId, loading, onCite }: Review
                 Click any citation to highlight its source on the right.
               </p>
             </>
-          ) : (
+          ) : !hasSubmittedQuery ? (
             <div className="py-16 text-center">
               <p className="text-sm font-medium text-gray-900">No review yet</p>
               <p className="mt-1 text-xs text-gray-500">
                 Run a research query to generate a literature review.
               </p>
+            </div>
+          ) : (
+            <div className="py-16 text-center">
+              <p className="text-sm font-medium text-gray-900">No review generated</p>
+              <p className="mt-1 text-xs text-gray-500">The submitted search did not return a literature review.</p>
             </div>
           )}
         </div>

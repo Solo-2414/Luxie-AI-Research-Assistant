@@ -29,7 +29,7 @@ export function CitationBadge({ label, matched, active, onActivate }: CitationBa
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1",
         active
           ? "border-blue-600 bg-blue-600 text-white"
-          : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
+          : "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100",
       )}
     >
       {label}

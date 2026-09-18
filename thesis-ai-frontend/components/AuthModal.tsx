@@ -24,10 +24,10 @@ export function AuthModal({ open, message, onClose }: AuthModalProps) {
         <h2 id="auth-modal-title" className="mt-4 text-lg font-semibold text-slate-900">Keep researching with Luxcie AI</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">{message ?? "Sign in or create a free account to unlock unlimited research and exports."}</p>
         <div className="mt-5 flex gap-3">
-          <TransitionLink href="/auth" className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">
+          <TransitionLink href="/login" className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">
             <LogIn className="h-4 w-4" aria-hidden="true" /> Log In
           </TransitionLink>
-          <TransitionLink href="/auth?mode=signup" className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+          <TransitionLink href="/signup" className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
             Sign Up
           </TransitionLink>
         </div>

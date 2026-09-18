@@ -6,6 +6,7 @@ import math
 import os
 import re
 from asyncio import sleep
+from urllib.parse import quote
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -123,6 +124,7 @@ async def fetch_openalex(
                     url=item.get("doi") or item.get("id"),
                     citation_count=item.get("cited_by_count"),
                     source="OpenAlex",
+                    venue=((item.get("primary_location") or {}).get("source") or {}).get("display_name"),
                 )
             )
         return papers
@@ -198,6 +200,7 @@ async def fetch_arxiv(
                     url=url_str,
                     citation_count=None,
                     source="arXiv",
+                    venue="arXiv",
                 )
             )
         return papers
@@ -212,7 +215,7 @@ async def fetch_from_semantic_scholar(query: str, limit: int = 5) -> list[Paper]
     params = {
         "query": query,
         "limit": limit,
-        "fields": "title,authors,year,abstract,url,citationCount,externalIds",
+        "fields": "title,authors,year,abstract,url,citationCount,externalIds,journal",
     }
     api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
     headers = {"x-api-key": api_key} if api_key else {}
@@ -255,12 +258,121 @@ async def fetch_from_semantic_scholar(query: str, limit: int = 5) -> list[Paper]
                     url=paper_url,
                     citation_count=item.get("citationCount"),
                     source="Semantic Scholar",
+                    venue=(item.get("journal") or {}).get("name"),
                 )
             )
         return papers
     except Exception as exc:
         print(f"Semantic Scholar fetch error: {exc}")
         return []
+
+
+async def fetch_citing_papers(
+    paper_id: str,
+    source: str,
+    limit: int = 10,
+) -> list[Paper]:
+    """Fetch a small, normalized list of works that cite a selected paper."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            if source == "OpenAlex":
+                openalex_id = paper_id.rstrip("/").split("/")[-1]
+                response = await client.get(
+                    "https://api.openalex.org/works",
+                    params={"filter": f"cites:{openalex_id}", "per-page": limit, "sort": "publication_date:desc"},
+                    headers={"User-Agent": "Luxcie-AI-Research-Assistant/1.0"},
+                )
+                response.raise_for_status()
+                return [
+                    Paper(
+                        paper_id=item.get("id"),
+                        title=(item.get("display_name") or "Untitled paper").strip(),
+                        authors=[
+                            author.get("author", {}).get("display_name", "")
+                            for author in (item.get("authorships") or [])[:3]
+                            if author.get("author", {}).get("display_name")
+                        ] or ["Unknown Author"],
+                        summary="No abstract available.",
+                        year=item.get("publication_year"),
+                        url=item.get("doi") or item.get("id"),
+                        citation_count=item.get("cited_by_count"),
+                        source="OpenAlex",
+                        venue=((item.get("primary_location") or {}).get("source") or {}).get("display_name"),
+                    )
+                    for item in response.json().get("results") or []
+                ]
+
+            if source == "Semantic Scholar":
+                semantic_scholar_id = paper_id
+                if semantic_scholar_id.lower().startswith("https://doi.org/"):
+                    semantic_scholar_id = semantic_scholar_id.removeprefix("https://doi.org/")
+                semantic_scholar_id = quote(semantic_scholar_id, safe="")
+                response = None
+                for attempt in range(3):
+                    response = await client.get(
+                        f"https://api.semanticscholar.org/graph/v1/paper/{semantic_scholar_id}/citations",
+                        params={"limit": limit, "fields": "title,authors,year,abstract,url,citationCount,journal,externalIds"},
+                    )
+                    if response.status_code != 429:
+                        break
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        delay = min(4.0, max(0.5, float(retry_after))) if retry_after else 2 ** attempt
+                    except ValueError:
+                        delay = 2 ** attempt
+                    print(f"Semantic Scholar citations rate limited; retry {attempt + 1}/3 in {delay:.1f}s")
+                    await sleep(delay)
+
+                if response is None or response.status_code == 429:
+                    print("Semantic Scholar citations remained rate limited; trying OpenAlex fallback")
+                    fallback_id = paper_id.replace("https://doi.org/", "").rstrip("/")
+                    fallback = await client.get(
+                        "https://api.openalex.org/works",
+                        params={"filter": f"cites:doi:{fallback_id}", "per-page": limit, "sort": "publication_date:desc"},
+                        headers={"User-Agent": "Luxcie-AI-Research-Assistant/1.0"},
+                    )
+                    if fallback.status_code != 200:
+                        print("Citation providers are rate limited; returning an empty citations list")
+                        return []
+                    return [
+                        Paper(
+                            paper_id=item.get("id"),
+                            title=(item.get("display_name") or "Untitled paper").strip(),
+                            authors=[a.get("author", {}).get("display_name", "") for a in (item.get("authorships") or [])[:3] if a.get("author", {}).get("display_name")] or ["Unknown Author"],
+                            summary="No abstract available.",
+                            year=item.get("publication_year"),
+                            url=item.get("doi") or item.get("id"),
+                            citation_count=item.get("cited_by_count"),
+                            source="OpenAlex",
+                            venue=((item.get("primary_location") or {}).get("source") or {}).get("display_name"),
+                        )
+                        for item in fallback.json().get("results") or []
+                    ]
+
+                if response.status_code != 200:
+                    print(f"Semantic Scholar citation lookup returned HTTP {response.status_code}; returning empty list")
+                    return []
+                citing_papers = []
+                for item in response.json().get("data") or []:
+                    cited = item.get("citingPaper") or {}
+                    citing_papers.append(
+                        Paper(
+                            paper_id=cited.get("paperId"),
+                            title=(cited.get("title") or "Untitled paper").strip(),
+                            authors=[author.get("name", "") for author in (cited.get("authors") or [])[:3] if author.get("name")]
+                            or ["Unknown Author"],
+                            summary=(cited.get("abstract") or "No abstract available.").strip(),
+                            year=cited.get("year"),
+                            url=cited.get("url"),
+                            citation_count=cited.get("citationCount"),
+                            source="Semantic Scholar",
+                            venue=(cited.get("journal") or {}).get("name"),
+                        )
+                    )
+                return citing_papers
+        except (httpx.HTTPError, ValueError) as exc:
+            print(f"Citation lookup error: {exc}")
+    return []
 
 
 def _paper_identity(paper: Paper) -> tuple[str, str]:

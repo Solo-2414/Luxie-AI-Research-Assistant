@@ -27,13 +27,14 @@ export default function AuthPage() {
       const response = await fetch(`${API_BASE_URL}/api/auth/${mode === "signin" ? "login" : "register"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(mode === "signin" ? { email, password } : { email, password, full_name: name }),
       })
-      const body = (await response.json().catch(() => null)) as { access_token?: string; detail?: string } | null
-      if (!response.ok || !body?.access_token) {
+      const body = (await response.json().catch(() => null)) as { detail?: string } | null
+      if (!response.ok) {
         throw new Error(typeof body?.detail === "string" ? body.detail : "Unable to authenticate")
       }
-      await login(body.access_token)
+      await login()
       router.push("/research")
     } catch (requestError) {
       setMessage(

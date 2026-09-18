@@ -13,6 +13,13 @@ export class ResearchApiError extends Error {
   }
 }
 
+export interface SearchHistoryItem {
+  id: number
+  query: string
+  results_count: number
+  timestamp: string
+}
+
 interface BackendPaper {
   paper_id?: string | null
   title?: string
@@ -22,12 +29,14 @@ interface BackendPaper {
   url?: string | null
   citation_count?: number | null
   source?: string | null
+  venue?: string | null
 }
 
 interface BackendResearchResponse {
   review?: string
   papers?: BackendPaper[]
   fallback_message?: string | null
+  is_guest?: boolean
   total_results?: number
   page?: number
   limit?: number
@@ -65,13 +74,42 @@ function errorMessageFromBody(body: unknown, status: number): string {
 
 export function mapPaper(paper: BackendPaper): PaperSource {
   return {
+    paperId: paper.paper_id ?? undefined,
     title: paper.title?.trim() || "Untitled paper",
     authors: Array.isArray(paper.authors) ? paper.authors.filter(Boolean) : [],
     year: paper.year ?? null,
+    citationCount: paper.citation_count ?? null,
     summary: paper.summary?.trim() || "No abstract available.",
     url: paper.url ?? undefined,
     source: paper.source ?? undefined,
+    venue: paper.venue ?? undefined,
   }
+}
+
+export async function fetchCitingPapers(paperId: string, source: string, signal?: AbortSignal): Promise<PaperSource[]> {
+  const params = new URLSearchParams({ paper_id: paperId })
+  params.set("source", source)
+  const response = await fetch(`${API_BASE_URL}/api/citations?${params.toString()}`, { credentials: "include", signal })
+  if (!response.ok) throw new ResearchApiError("Unable to load citing papers", response.status)
+  const papers = (await response.json()) as BackendPaper[]
+  return papers.map(mapPaper)
+}
+
+export async function fetchSearchHistory(signal?: AbortSignal): Promise<SearchHistoryItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/history`, {
+    credentials: "include",
+    signal,
+  })
+  if (!response.ok) throw new ResearchApiError("Unable to load search history", response.status)
+  return (await response.json()) as SearchHistoryItem[]
+}
+
+export async function deleteSearchHistory(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/history/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  })
+  if (!response.ok) throw new ResearchApiError("Unable to delete search history item", response.status)
 }
 
 export function mapResearchResponse(payload: BackendResearchResponse): LuxcieResearchResponse {
@@ -97,16 +135,16 @@ export async function fetchResearch(
     sortRecent: false,
   },
   signal?: AbortSignal,
-  token?: string | null,
+  page = 1,
 ): Promise<LuxcieResearchResponse> {
   let response: Response
   try {
-    response = await fetch(`${RESEARCH_URL}?page=1&limit=${filters.limit}`, {
+    response = await fetch(`${RESEARCH_URL}?page=${page}&limit=${filters.limit}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
+      credentials: "include",
       body: JSON.stringify({
         query,
         limit: filters.limit,
@@ -137,17 +175,17 @@ export async function streamResearch(
     onText: (text: string) => void
   },
   signal?: AbortSignal,
-  token?: string | null,
+  page = 1,
 ): Promise<void> {
   let response: Response
   try {
-    response = await fetch(`${RESEARCH_URL}?page=1&limit=${filters.limit}`, {
+    response = await fetch(`${RESEARCH_URL}?page=${page}&limit=${filters.limit}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
+      credentials: "include",
       body: JSON.stringify({
         query,
         limit: filters.limit,

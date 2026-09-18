@@ -69,7 +69,8 @@ async def generate_literature_review(
 ) -> AsyncGenerator[str, None]:
     api_keys = _get_api_keys()
     if not api_keys:
-        raise RuntimeError("GOOGLE_API_KEY or GOOGLE_API_KEYS is not set")
+        yield "Literature review is temporarily unavailable. Please view the sources below."
+        return
 
     system_instruction = (
         "You are an academic research assistant. Write a concise, cited literature "
@@ -120,6 +121,4 @@ async def generate_literature_review(
                     print(f"Model {model.name} failed on Key {key_index}, trying next: {error}")
                 continue
 
-    raise RuntimeError(
-        "All API keys and models have exhausted their free-tier quotas. Please try again later."
-    )
+    yield "Literature review is temporarily unavailable due to high API demand. Please view the sources below."

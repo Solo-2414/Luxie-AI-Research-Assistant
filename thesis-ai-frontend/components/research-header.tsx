@@ -1,9 +1,10 @@
 "use client"
 
-import { type FormEvent, useState } from "react"
+import { useState } from "react"
 import { TransitionLink } from "@/components/TransitionLink"
-import { Loader2, Search, SlidersHorizontal, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SearchInput } from "@/components/SearchInput"
 
 interface ResearchHeaderProps {
   loading: boolean
@@ -23,12 +24,10 @@ export interface ResearchFilters {
 }
 
 export function ResearchHeader({ loading, guestSearchesLeft, sortRecent, onSortRecentChange, startYear, onStartYearChange, onResearch }: ResearchHeaderProps) {
-  const [query, setQuery] = useState("")
   const [limit, setLimit] = useState("8")
   const [filtersOpen, setFiltersOpen] = useState(false)
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault()
+  const handleSearch = (query: string) => {
     onResearch(query, {
       limit: Number(limit),
       startYear,
@@ -47,18 +46,8 @@ export function ResearchHeader({ loading, guestSearchesLeft, sortRecent, onSortR
           <span className="text-sm font-semibold tracking-tight text-gray-900 transition-colors group-hover:text-indigo-600">Luxcie AI</span>
         </TransitionLink>
 
-        <form onSubmit={handleSubmit} className="relative flex w-full min-w-0 max-w-3xl flex-1 flex-col">
-          <div className="flex w-full items-center gap-2 rounded-full border border-gray-200 bg-white py-1 pl-4 pr-1 shadow-sm transition-shadow focus-within:border-gray-300 focus-within:shadow-md">
-            <Search className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-            <label htmlFor="research-query" className="sr-only">Research query</label>
-            <input id="research-query" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Research microplastics in marine ecosystems…" className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400" />
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="Research filters" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
-              <SlidersHorizontal className="h-4 w-4 text-gray-400" aria-hidden="true" />
-            </Button>
-            <Button type="submit" disabled={loading || !query.trim()} className="min-h-9 shrink-0 gap-1.5 rounded-full bg-gray-900 px-3 text-white hover:bg-gray-800 sm:px-3.5">
-              {loading ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="hidden sm:inline">Researching</span></> : <><Search className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Research</span></>}
-            </Button>
-          </div>
+        <div className="relative flex w-full min-w-0 max-w-3xl flex-1 flex-col">
+          <SearchInput loading={loading} filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((open) => !open)} onSearch={handleSearch} />
           {guestSearchesLeft !== null ? (
             <div aria-live="polite" className="mt-1.5 flex items-center justify-center gap-2 text-[0.7rem] text-gray-400 sm:justify-start sm:pl-4">
               <span className={`h-1.5 w-1.5 rounded-full ${guestSearchesLeft === 0 ? "bg-rose-400" : "bg-emerald-400"}`} aria-hidden="true" />
@@ -74,12 +63,12 @@ export function ResearchHeader({ loading, guestSearchesLeft, sortRecent, onSortR
               <select value={sortRecent ? "recent" : "relevant"} onChange={(e) => onSortRecentChange(e.target.value === "recent")} className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700"><option value="relevant">Relevance Score</option><option value="recent">Publication Date (Newest First)</option></select>
               <span className="hidden h-5 w-px bg-gray-200 sm:block" aria-hidden="true" />
               <span className="text-gray-400">Presets</span>
-              <button type="button" onClick={() => onStartYearChange(new Date().getFullYear() - 5)} className={`rounded-md border px-2 py-1 text-xs ${startYear === new Date().getFullYear() - 5 ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>🎓 Thesis Standard (Last 5 Yrs)</button>
-              <button type="button" onClick={() => onStartYearChange(new Date().getFullYear() - 3)} className={`rounded-md border px-2 py-1 text-xs ${startYear === new Date().getFullYear() - 3 ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>⚡ Cutting-Edge (Last 3 Yrs)</button>
-              <button type="button" onClick={() => onStartYearChange(null)} className={`rounded-md border px-2 py-1 text-xs ${startYear === null ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>🌐 All Time</button>
+              <button type="button" onClick={() => onStartYearChange(new Date().getFullYear() - 5)} className={`rounded-md border px-2 py-1 text-xs ${startYear === new Date().getFullYear() - 5 ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>Thesis Standard (Last 5 Yrs)</button>
+              <button type="button" onClick={() => onStartYearChange(new Date().getFullYear() - 3)} className={`rounded-md border px-2 py-1 text-xs ${startYear === new Date().getFullYear() - 3 ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>Leading-Edge (Last 3 Yrs)</button>
+              <button type="button" onClick={() => onStartYearChange(null)} className={`rounded-md border px-2 py-1 text-xs ${startYear === null ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>All Time</button>
             </div>
           ) : null}
-        </form>
+        </div>
       </div>
     </header>
   )

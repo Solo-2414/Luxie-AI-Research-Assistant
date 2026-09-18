@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-const TOKEN_KEY = "luxcie_access_token"
 
 export interface AuthUser {
   id: number
@@ -13,10 +12,9 @@ export interface AuthUser {
 
 interface AuthContextValue {
   user: AuthUser | null
-  token: string | null
   loading: boolean
-  login: (accessToken: string) => Promise<void>
-  logout: () => void
+  login: () => Promise<void>
+  logout: () => Promise<void>
   checkSession: () => Promise<void>
 }
 
@@ -24,31 +22,26 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY)
-    setToken(null)
-    setUser(null)
+  const logout = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/logout`, { method: "POST", credentials: "include" })
+    } catch {
+      // Clear local session state even when the API is temporarily unavailable.
+    } finally {
+      setUser(null)
+      setLoading(false)
+    }
   }, [])
 
   const checkSession = useCallback(async () => {
-    const storedToken = localStorage.getItem(TOKEN_KEY)
-    if (!storedToken) {
-      setToken(null)
-      setUser(null)
-      setLoading(false)
-      return
-    }
-
-    setToken(storedToken)
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${storedToken}` },
+        credentials: "include",
       })
       if (!response.ok) {
-        logout()
+        setUser(null)
         return
       }
       setUser((await response.json()) as AuthUser)
@@ -57,11 +50,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [logout])
+  }, [])
 
-  const login = useCallback(async (accessToken: string) => {
-    localStorage.setItem(TOKEN_KEY, accessToken)
-    setToken(accessToken)
+  const login = useCallback(async () => {
     await checkSession()
   }, [checkSession])
 
@@ -70,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [checkSession])
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, checkSession }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, checkSession }}>
       {children}
     </AuthContext.Provider>
   )

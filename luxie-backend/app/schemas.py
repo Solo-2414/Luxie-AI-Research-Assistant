@@ -1,4 +1,7 @@
 from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+
+from pydantic import BaseModel, Field, field_serializer
 
 
 class ResearchRequest(BaseModel):
@@ -18,6 +21,7 @@ class Paper(BaseModel):
     url: str | None = None
     citation_count: int | None = None
     source: str | None = None
+    venue: str | None = None
 
 
 class ResearchResponse(BaseModel):
@@ -40,3 +44,23 @@ class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class SearchHistoryCreate(BaseModel):
+    query: str = Field(..., min_length=1, max_length=500)
+    results_count: int = Field(default=0, ge=0)
+
+
+class SearchHistoryResponse(BaseModel):
+    id: int
+    query: str
+    results_count: int
+    timestamp: datetime
+
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, value: datetime) -> str:
+        normalized = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return normalized.isoformat().replace("+00:00", "Z")
+
+    class Config:
+        from_attributes = True

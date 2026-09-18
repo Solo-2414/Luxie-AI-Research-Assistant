@@ -5,7 +5,7 @@ import os
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi_cache import FastAPICache
@@ -16,13 +16,15 @@ import google.generativeai as genai
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sqlalchemy import select
 
-from .database import Base, engine
+from .database import Base, engine, get_db
 from .auth_utils import decode_access_token
+from .models import SearchHistory, User
 from .review import generate_literature_review
-from .routers.auth import router as auth_router
-from .schemas import Paper, ResearchRequest, ResearchResponse
-from .scholar import ScholarError, search_papers
+from .routers.auth import get_current_user, get_optional_current_user, router as auth_router
+from .schemas import Paper, ResearchRequest, ResearchResponse, SearchHistoryCreate, SearchHistoryResponse
+from .scholar import ScholarError, fetch_citing_papers, search_papers
 
 load_dotenv()
 
@@ -46,7 +48,7 @@ def create_database_tables() -> None:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,10 +63,83 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/api/history", response_model=SearchHistoryResponse, status_code=201)
+def create_search_history(
+    payload: SearchHistoryCreate,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+) -> SearchHistory:
+    history = SearchHistory(
+        user_id=current_user.id,
+        query=payload.query.strip(),
+        results_count=payload.results_count,
+    )
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+    return history
+
+
+@app.get("/api/history", response_model=list[SearchHistoryResponse])
+def list_search_history(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+) -> list[SearchHistory]:
+    return list(
+        db.scalars(
+            select(SearchHistory)
+            .where(SearchHistory.user_id == current_user.id)
+            .order_by(SearchHistory.timestamp.desc())
+            .limit(20)
+        )
+    )
+
+
+@app.delete("/api/history/{history_id}", status_code=204)
+def delete_search_history(
+    history_id: int,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+) -> None:
+    history = db.scalar(
+        select(SearchHistory).where(
+            SearchHistory.id == history_id,
+            SearchHistory.user_id == current_user.id,
+        )
+    )
+    if history is None:
+        raise HTTPException(status_code=404, detail="Search history item not found")
+    db.delete(history)
+    db.commit()
+
+
+@app.delete("/api/history", status_code=204)
+def clear_search_history(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+) -> None:
+    history_items = db.scalars(select(SearchHistory).where(SearchHistory.user_id == current_user.id)).all()
+    for history in history_items:
+        db.delete(history)
+    db.commit()
+
+
+@app.get("/api/citations", response_model=list[Paper])
+@limiter.limit("30/minute")
+@cache(expire=1800, namespace="citations")
+async def citations(
+    request: Request,
+    paper_id: str = Query(..., min_length=1),
+    source: str = Query(..., pattern="^(OpenAlex|Semantic Scholar)$"),
+) -> list[Paper]:
+    return await fetch_citing_papers(paper_id=paper_id, source=source)
+
+
 def has_valid_bearer_token(request: Request) -> bool:
     authorization = request.headers.get("Authorization", "")
     scheme, _, token = authorization.partition(" ")
-    return scheme.lower() == "bearer" and bool(token) and decode_access_token(token) is not None
+    token = token if scheme.lower() == "bearer" else request.cookies.get("access_token", "")
+    return bool(token) and decode_access_token(token) is not None
 
 
 def optimize_failed_query(query: str) -> str:
@@ -184,6 +259,8 @@ async def cached_search_papers(
 async def research(
     request: Request,
     payload: ResearchRequest,
+    current_user: User | None = Depends(get_optional_current_user),
+    db=Depends(get_db),
     sort_by: str = Query("relevance", enum=["relevance", "citations", "newest", "oldest"]),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50),
@@ -237,6 +314,16 @@ async def research(
     offset = (page - 1) * limit
     paginated_papers = papers[offset : offset + limit]
     total_pages = math.ceil(total_results / limit) if total_results else 0
+
+    if current_user is not None:
+        db.add(
+            SearchHistory(
+                user_id=current_user.id,
+                query=query,
+                results_count=total_results,
+            )
+        )
+        db.commit()
 
     async def event_stream():
         metadata = {

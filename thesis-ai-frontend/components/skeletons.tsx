@@ -4,15 +4,21 @@ function Bar({ className = "" }: { className?: string }) {
 
 export function ReviewSkeleton() {
   return (
-    <div className="space-y-8" aria-hidden="true">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="space-y-3">
-          <Bar className="h-5 w-40" />
-          <Bar className="h-4 w-full" />
-          <Bar className="h-4 w-full" />
-          <Bar className="h-4 w-4/5" />
-        </div>
-      ))}
+    <div className="space-y-5" role="status" aria-live="polite" aria-label="Generating literature review">
+      <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-blue-500" aria-hidden="true" />
+        Generating literature review...
+      </div>
+      <div className="space-y-8" aria-hidden="true">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="space-y-3">
+            <Bar className="h-5 w-40" />
+            <Bar className="h-4 w-full" />
+            <Bar className="h-4 w-full" />
+            <Bar className="h-4 w-4/5" />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

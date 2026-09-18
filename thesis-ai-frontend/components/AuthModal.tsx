@@ -14,7 +14,7 @@ export function AuthModal({ open, message, onClose }: AuthModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-      <div className="luxcie-pop relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <div className="luxcie-pop relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <button type="button" onClick={onClose} aria-label="Close dialog" className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
           <X className="h-4 w-4" aria-hidden="true" />
         </button>

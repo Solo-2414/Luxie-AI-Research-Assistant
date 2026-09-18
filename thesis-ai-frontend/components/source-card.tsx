@@ -51,10 +51,10 @@ export const SourceCard = forwardRef<HTMLElement, SourceCardProps>(function Sour
         ) : null}
       </div>
 
-      <h3 className="mt-3 text-pretty text-sm font-semibold leading-snug text-gray-900">{paper.title}</h3>
-      <p className="mt-1 text-xs text-gray-500">{formatAuthors(paper.authors)}</p>
+      <h3 className="mt-3 break-words text-pretty text-sm font-semibold leading-snug text-gray-900">{paper.title}</h3>
+      <p className="mt-1 break-words text-xs text-gray-500">{formatAuthors(paper.authors)}</p>
 
-      <p className="mt-3 text-sm leading-relaxed text-gray-600">{paper.summary}</p>
+      <p className="mt-3 break-words text-sm leading-relaxed text-gray-600">{paper.summary}</p>
 
       <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
         <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">

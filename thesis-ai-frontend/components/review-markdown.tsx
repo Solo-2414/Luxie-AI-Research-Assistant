@@ -121,5 +121,5 @@ export function ReviewMarkdown({ review, papers, activeId, onCite }: ReviewMarkd
   }
   flushList()
 
-  return <div>{blocks}</div>
+  return <div className="[overflow-wrap:anywhere]">{blocks}</div>
 }

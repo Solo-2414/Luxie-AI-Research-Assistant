@@ -177,10 +177,10 @@ export default function ResearchPage() {
   }, [data, openAuthModal, user])
 
   return (
-    <div className="luxcie-fade-in flex h-screen flex-col bg-white">
+    <div className="luxcie-fade-in flex min-h-screen h-dvh flex-col bg-white">
       <ResearchHeader loading={loading} guestSearchesLeft={user ? null : Math.max(GUEST_SEARCH_LIMIT - guestSearches, 0)} sortRecent={sortRecent} onSortRecentChange={setSortRecent} startYear={startYear} onStartYearChange={setStartYear} onResearch={handleResearch} />
       {error ? <div role="alert" className="luxcie-fade-in border-b border-red-100 bg-red-50 px-6 py-2 text-center text-sm text-red-700">{error}</div> : null}
-      <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
+      <main className="grid min-h-0 flex-1 auto-rows-[minmax(28rem,auto)] overflow-y-auto grid-cols-1 lg:grid-rows-1 lg:overflow-hidden lg:grid-cols-[1.1fr_0.9fr]">
         <div className="min-h-0 border-gray-200 lg:border-r">
           {fallbackMessage ? <div role="status" className="luxcie-pop mx-8 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">{fallbackMessage}</div> : null}
           <ReviewPane review={data.review} papers={data.papers} activeId={activeId} loading={loading} onCite={setActiveId} />

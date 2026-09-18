@@ -52,8 +52,8 @@ export function SourcesPane({ papers, referenceCounts, activeId, loading, curren
 
   return (
     <section aria-label="Sources" className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-200 bg-white/80 px-6 py-4 backdrop-blur-md">
-        <div className="flex items-center gap-2">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white/80 px-4 py-4 backdrop-blur-md sm:px-6">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">Sources</h2>
           {!loading && (
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
@@ -66,12 +66,12 @@ export function SourcesPane({ papers, referenceCounts, activeId, loading, curren
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-gray-400">Sort</span>
           <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
             <SelectTrigger
               size="sm"
-              className="h-8 w-[150px] border-gray-200 bg-white text-xs"
+              className="h-8 w-[min(150px,45vw)] border-gray-200 bg-white text-xs"
               aria-label="Sort sources"
             >
               <SelectValue />
@@ -85,7 +85,7 @@ export function SourcesPane({ papers, referenceCounts, activeId, loading, curren
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-6 py-5">
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-6">
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => <SourceCardSkeleton key={i} />)
         ) : papers.length === 0 ? (

@@ -22,7 +22,7 @@ export function ReviewPane({ review, papers, activeId, loading, onCite }: Review
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-8 py-8">
+        <div className="mx-auto max-w-2xl px-4 py-8 sm:px-8">
           {loading ? (
             <ReviewSkeleton />
           ) : review.trim() ? (

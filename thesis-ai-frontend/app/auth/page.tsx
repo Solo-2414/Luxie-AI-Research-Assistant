@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft, Eye, EyeOff, Sparkles } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin")
@@ -24,7 +24,7 @@ export default function AuthPage() {
     setSubmitting(true)
     setMessage(null)
     try {
-      const response = await fetch(`${API_URL}/api/auth/${mode === "signin" ? "login" : "register"}`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/${mode === "signin" ? "login" : "register"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mode === "signin" ? { email, password } : { email, password, full_name: name }),

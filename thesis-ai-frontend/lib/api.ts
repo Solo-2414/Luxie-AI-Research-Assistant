@@ -1,6 +1,7 @@
 import type { LuxcieResearchResponse, PaperSource } from "./types"
 
-const RESEARCH_URL = "http://127.0.0.1:8000/api/research"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const RESEARCH_URL = `${API_BASE_URL}/api/research`
 
 export class ResearchApiError extends Error {
   status: number

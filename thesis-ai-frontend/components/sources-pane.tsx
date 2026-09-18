@@ -21,14 +21,15 @@ interface SourcesPaneProps {
   referenceCounts: number[]
   activeId: string | null
   loading: boolean
-  currentYear: number
 }
 
-export function SourcesPane({ papers, referenceCounts, activeId, loading, currentYear }: SourcesPaneProps) {
+export function SourcesPane({ papers, referenceCounts, activeId, loading }: SourcesPaneProps) {
   const [sort, setSort] = useState<SortKey>("newest")
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const currentYear = new Date().getFullYear()
   const recentCount = papers.filter((paper) => paper.year !== null && paper.year >= currentYear - 5).length
-  const compliance = papers.length === 0 ? 0 : Math.round((recentCount / papers.length) * 100)
+  const totalPapers = papers.length
+  const compliance = totalPapers === 0 ? 0 : Math.round((recentCount / totalPapers) * 100)
 
   const ordered = useMemo(() => {
     const withIndex = papers.map((paper, originalIndex) => ({ paper, originalIndex }))
@@ -77,9 +78,9 @@ export function SourcesPane({ papers, referenceCounts, activeId, loading, curren
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="oldest">Oldest</SelectItem>
-              <SelectItem value="most-cited">Highest citations</SelectItem>
+              <SelectItem value="newest">Publication Date (Newest First)</SelectItem>
+              <SelectItem value="oldest">Publication Date (Oldest First)</SelectItem>
+              <SelectItem value="most-cited">Citation Impact (Highest)</SelectItem>
             </SelectContent>
           </Select>
         </div>

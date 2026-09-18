@@ -10,6 +10,7 @@ import { ResearchHeader, type ResearchFilters } from "@/components/research-head
 import { ReviewPane } from "@/components/review-pane"
 import { SourcesPane } from "@/components/sources-pane"
 import { ExportFooter } from "@/components/export-footer"
+import { SkeletonLoader } from "@/components/SkeletonLoader"
 
 const EMPTY_RESPONSE: LuxcieResearchResponse = { review: "", papers: [] }
 const GUEST_SEARCH_LIMIT = 3
@@ -87,16 +88,20 @@ export default function ResearchPage() {
   const referenceCounts = useMemo(() => countReferences(data.review, data.papers), [data.review, data.papers])
 
   const handleResearch = useCallback(async (query: string, filters: ResearchFilters) => {
+    setLoading(true)
     const trimmed = query.trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      setLoading(false)
+      return
+    }
     if (!user && !authLoading && guestSearches >= GUEST_SEARCH_LIMIT) {
+      setLoading(false)
       openAuthModal("You've reached today's guest limit! Sign up for free to keep researching.")
       return
     }
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
-    setLoading(true)
     setError(null)
     setFallbackMessage(null)
     setActiveId(null)
@@ -108,6 +113,7 @@ export default function ResearchPage() {
         filters,
         {
           onPapers: (result) => {
+            setLoading(false)
             setData((current) => ({
               ...current,
               papers: result.papers,
@@ -180,14 +186,18 @@ export default function ResearchPage() {
     <div className="luxcie-fade-in flex min-h-screen h-dvh flex-col bg-white">
       <ResearchHeader loading={loading} guestSearchesLeft={user ? null : Math.max(GUEST_SEARCH_LIMIT - guestSearches, 0)} sortRecent={sortRecent} onSortRecentChange={setSortRecent} startYear={startYear} onStartYearChange={setStartYear} onResearch={handleResearch} />
       {error ? <div role="alert" className="luxcie-fade-in border-b border-red-100 bg-red-50 px-6 py-2 text-center text-sm text-red-700">{error}</div> : null}
-      <main className="grid min-h-0 flex-1 auto-rows-[minmax(28rem,auto)] overflow-y-auto grid-cols-1 lg:grid-rows-1 lg:overflow-hidden lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="min-h-0 border-gray-200 lg:border-r">
-          {fallbackMessage ? <div role="status" className="luxcie-pop mx-8 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">{fallbackMessage}</div> : null}
-          <ReviewPane review={data.review} papers={data.papers} activeId={activeId} loading={loading} onCite={setActiveId} />
-        </div>
-        <div className="min-h-0 border-t border-gray-200 lg:border-t-0">
-          <SourcesPane papers={data.papers} referenceCounts={referenceCounts} activeId={activeId} loading={loading} currentYear={currentYear} />
-        </div>
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
+        {loading ? <SkeletonLoader /> : (
+          <div className="grid min-h-0 flex-1 auto-rows-[minmax(28rem,auto)] grid-cols-1 lg:grid-rows-1 lg:overflow-hidden lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="min-h-0 border-gray-200 lg:border-r">
+              {fallbackMessage ? <div role="status" className="luxcie-pop mx-8 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">{fallbackMessage}</div> : null}
+              <ReviewPane review={data.review} papers={data.papers} activeId={activeId} loading={false} onCite={setActiveId} />
+            </div>
+            <div className="min-h-0 border-t border-gray-200 lg:border-t-0">
+              <SourcesPane papers={data.papers} referenceCounts={referenceCounts} activeId={activeId} loading={false} />
+            </div>
+          </div>
+        )}
       </main>
       <ExportFooter paperCount={data.papers.length} status={exportStatus} disabled={loading || data.papers.length === 0} onExport={handleExport} />
       <AuthModal open={authModalOpen} message={authModalMessage} onClose={() => setAuthModalOpen(false)} />

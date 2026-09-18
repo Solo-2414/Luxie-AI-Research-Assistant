@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+import re
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -11,6 +12,35 @@ from .schemas import Paper
 
 class ScholarError(Exception):
     pass
+
+
+COMPOUND_SUFFIXES = (
+    "husbandry",
+    "management",
+    "making",
+    "keeping",
+    "ment",
+    "ness",
+    "ship",
+    "tion",
+    "ing",
+)
+
+
+def _compound_query_fallback(query: str) -> str | None:
+    """Return one conservative spaced variant for a long compound query."""
+    if len(query) <= 10 or not re.fullmatch(r"[A-Za-z]+", query):
+        return None
+
+    camel_case = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", query)
+    if camel_case != query:
+        return camel_case
+
+    normalized = query.lower()
+    for suffix in COMPOUND_SUFFIXES:
+        if normalized.endswith(suffix) and len(query) - len(suffix) >= 3:
+            return f"{query[:-len(suffix)]} {query[-len(suffix):]}"
+    return None
 
 
 def _reconstruct_openalex_abstract(inv_index: dict | None) -> str:
@@ -178,27 +208,35 @@ async def search_papers(
     """Fetches from OpenAlex and ArXiv concurrently, deduplicates, and returns papers."""
     per_source_limit = max(2, limit)
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        # Fetch both concurrently for speed
+    async def fetch_combined(client: httpx.AsyncClient, search_query: str) -> list[Paper]:
         results = await asyncio.gather(
             fetch_openalex(
-                client, query, limit=per_source_limit, sort_by_recent=sort_by_recent
+                client, search_query, limit=per_source_limit, sort_by_recent=sort_by_recent
             ),
             fetch_arxiv(
-                client, query, limit=per_source_limit, sort_by_recent=sort_by_recent
+                client, search_query, limit=per_source_limit, sort_by_recent=sort_by_recent
             ),
             return_exceptions=True,
         )
+        combined: list[Paper] = []
+        for result in results:
+            if isinstance(result, list):
+                combined.extend(result)
+        return combined
 
-        combined_papers: list[Paper] = []
-        for res in results:
-            if isinstance(res, list):
-                combined_papers.extend(res)
+    fallback_messages: list[str] = []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        combined_papers = await fetch_combined(client, query)
+        fallback_query = _compound_query_fallback(query)
+        if not combined_papers and fallback_query:
+            combined_papers = await fetch_combined(client, fallback_query)
+            if combined_papers:
+                fallback_messages.append(
+                    f'No exact results for "{query}". Retried as "{fallback_query}".'
+                )
 
         if not combined_papers:
-            raise ScholarError(
-                "Unable to fetch papers from OpenAlex or ArXiv"
-            )
+            return [], "No papers found for this query. Try adding spaces or using a broader search."
 
         # Deduplicate papers based on title similarity
         seen_titles = set()
@@ -210,17 +248,16 @@ async def search_papers(
                 unique_papers.append(paper)
 
         filtered = _filter_by_year(unique_papers, start_year, end_year)
-        fallback_message: str | None = None
         current_year = datetime.now().year
         if len(filtered) < 4 and start_year is not None:
             fallback_start_year = start_year - 5
             if fallback_start_year <= 0 or fallback_start_year > current_year:
                 fallback_start_year = None
             filtered = _filter_by_year(unique_papers, fallback_start_year, end_year)
-            fallback_message = (
+            fallback_messages.append(
                 "Fewer than 4 recent papers found. Automatically expanded search "
                 "to include foundational literature."
             )
         if sort_by_recent:
             filtered.sort(key=lambda paper: paper.year or 0, reverse=True)
-        return filtered[:limit], fallback_message
+        return filtered[:limit], " ".join(fallback_messages) or None

@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import { TransitionLink } from "@/components/TransitionLink"
 import { FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Eye, EyeOff, Sparkles } from "lucide-react"
@@ -36,7 +36,13 @@ export default function AuthPage() {
       await login(body.access_token)
       router.push("/research")
     } catch (requestError) {
-      setMessage(requestError instanceof Error ? requestError.message : "Unable to authenticate")
+      setMessage(
+        requestError instanceof TypeError
+          ? `Unable to reach the API at ${API_BASE_URL}. Make sure the backend is running.`
+          : requestError instanceof Error
+            ? requestError.message
+            : "Unable to authenticate",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -50,12 +56,12 @@ export default function AuthPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8 text-slate-900 sm:px-6 sm:py-12">
       <div className="luxcie-fade-up w-full max-w-md">
-        <Link href="/landing" className="mb-8 flex items-center justify-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
+        <TransitionLink href="/landing" className="mb-8 flex items-center justify-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
           <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white">
             <Sparkles className="h-4 w-4" aria-hidden="true" />
           </span>
           Luxcie AI
-        </Link>
+        </TransitionLink>
 
         <section className="luxcie-pop rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
           <div className="text-center">
@@ -115,9 +121,9 @@ export default function AuthPage() {
           </button>
         </section>
 
-        <Link href="/landing" className="mt-6 flex items-center justify-center gap-1.5 text-sm text-slate-500 transition hover:text-indigo-600">
+        <TransitionLink href="/landing" className="mt-6 flex items-center justify-center gap-1.5 text-sm text-slate-500 transition hover:text-indigo-600">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to home
-        </Link>
+        </TransitionLink>
       </div>
     </main>
   )

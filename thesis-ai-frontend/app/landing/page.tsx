@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import { TransitionLink } from "@/components/TransitionLink"
 import { useAuth } from "@/context/AuthContext"
 import { ArrowRight, BookOpen, Database, Download, Filter, Sparkles } from "lucide-react"
 
@@ -29,30 +29,30 @@ export default function LandingPage() {
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <nav className="luxcie-fade-in border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
+          <TransitionLink href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white">
               <Sparkles className="h-4 w-4" aria-hidden="true" />
             </span>
             Luxcie AI
-          </Link>
+          </TransitionLink>
           <div className="flex min-w-0 items-center gap-1 sm:gap-3">
             {user ? (
               <>
-                <Link href="/research" className="rounded-xl bg-indigo-600 px-2.5 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:px-4 sm:text-sm">
+                <TransitionLink href="/research" className="rounded-xl bg-indigo-600 px-2.5 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:px-4 sm:text-sm">
                   Go to Workspace
-                </Link>
+                </TransitionLink>
                 <button type="button" onClick={logout} className="rounded-xl px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-600 sm:px-4 sm:text-sm">
                   Logout
                 </button>
               </>
             ) : (
               <>
-                <Link href="/auth" className="rounded-xl px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-600 sm:px-4 sm:text-sm">
+                <TransitionLink href="/auth" className="rounded-xl px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-600 sm:px-4 sm:text-sm">
                   Sign In
-                </Link>
-                <Link href="/auth" className="rounded-xl bg-indigo-600 px-2.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:px-4 sm:text-sm">
+                </TransitionLink>
+                <TransitionLink href="/auth" className="rounded-xl bg-indigo-600 px-2.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:px-4 sm:text-sm">
                   Get Started
-                </Link>
+                </TransitionLink>
               </>
             )}
           </div>
@@ -70,10 +70,10 @@ export default function LandingPage() {
           <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
             Accelerate literature reviews with focused synthesis from dual-sourced open-access databases, built for the way researchers actually work.
           </p>
-          <Link href="/auth" className="mt-9 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-            Start researching
+          <TransitionLink href="/research" className="mt-9 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            Try free research
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
+          </TransitionLink>
         </div>
       </section>
 
@@ -93,15 +93,15 @@ export default function LandingPage() {
 
       <footer className="luxcie-fade-in border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-8 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <TransitionLink href="/" className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
             Luxcie AI
-          </Link>
+          </TransitionLink>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-500">
-            <Link href="/auth" className="transition hover:text-indigo-600">Sign in</Link>
-            <Link href="/auth" className="transition hover:text-indigo-600">Get started</Link>
+            <TransitionLink href="/auth" className="transition hover:text-indigo-600">Sign in</TransitionLink>
+            <TransitionLink href="/auth" className="transition hover:text-indigo-600">Get started</TransitionLink>
             <span className="text-slate-300" aria-hidden="true">|</span>
             <span>© {new Date().getFullYear()} Luxcie AI</span>
           </div>
